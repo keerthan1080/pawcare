@@ -1,0 +1,18 @@
+# Exclude frontend & node_modules from Python backend Docker build context
+frontend/
+**/node_modules/
+
+# Python virtual environments & caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.db
+*.sqlite3
+
+# Git & IDE metadata
+.git/
+.idea/
+.vscode/
