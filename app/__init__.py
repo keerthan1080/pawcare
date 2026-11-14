@@ -1,1 +1,0 @@
-"""PawCare Backend Application Package."""
