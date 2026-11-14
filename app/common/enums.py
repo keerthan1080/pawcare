@@ -1,0 +1,85 @@
+from enum import Enum
+
+
+class UserRole(str, Enum):
+    PET_PARENT = "PET_PARENT"
+    CAREGIVER = "CAREGIVER"
+    ADMIN = "ADMIN"
+
+
+class PetSpecies(str, Enum):
+    DOG = "DOG"
+    CAT = "CAT"
+    BIRD = "BIRD"
+    RABBIT = "RABBIT"
+    SMALL_MAMMAL = "SMALL_MAMMAL"
+    REPTILE = "REPTILE"
+    OTHER = "OTHER"
+
+
+class PetGender(str, Enum):
+    MALE = "MALE"
+    FEMALE = "FEMALE"
+    UNKNOWN = "UNKNOWN"
+
+
+class MedicalRecordType(str, Enum):
+    VACCINATION = "VACCINATION"
+    MEDICATION = "MEDICATION"
+    ALLERGY = "ALLERGY"
+    CHECKUP = "CHECKUP"
+    OTHER = "OTHER"
+
+
+class ServiceType(str, Enum):
+    PET_BOARDING = "PET_BOARDING"
+    IN_HOME_PET_SITTING = "IN_HOME_PET_SITTING"
+    DROP_IN_VISITS = "DROP_IN_VISITS"
+    DOG_WALKING = "DOG_WALKING"
+    DAY_CARE = "DAY_CARE"
+
+
+class PriceUnit(str, Enum):
+    PER_NIGHT = "PER_NIGHT"
+    PER_VISIT = "PER_VISIT"
+    PER_WALK = "PER_WALK"
+    PER_DAY = "PER_DAY"
+
+
+class VerificationStatus(str, Enum):
+    PENDING = "PENDING"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    VERIFIED = "VERIFIED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
+class VerificationCategory(str, Enum):
+    IDENTITY = "IDENTITY"
+    ADDRESS = "ADDRESS"
+    BACKGROUND_CHECK = "BACKGROUND_CHECK"
+    EXPERIENCE = "EXPERIENCE"
+    CERTIFICATION = "CERTIFICATION"
+    BOARDING_LOCATION = "BOARDING_LOCATION"
+
+
+class BookingStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
+    PAYMENT_PENDING = "PAYMENT_PENDING"
+    CONFIRMED = "CONFIRMED"
+    PAID = "PAID"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
+    REFUND_PENDING = "REFUND_PENDING"
+    REFUNDED = "REFUNDED"
+    DISPUTED = "DISPUTED"
+
+
+class CareTaskStatus(str, Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    SKIPPED = "SKIPPED"
+    MISSED = "MISSED"
