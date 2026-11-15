@@ -19,6 +19,8 @@ from app.modules.pets.schemas import (
     PetCreateRequest,
     PetEmergencyInfoUpdateRequest,
     PetEmergencySummaryResponse,
+    PetMediaCreateRequest,
+    PetMediaResponse,
     PetParentContactSummary,
     PetPhotoUploadRequest,
     PetPhotoUploadResponse,
@@ -31,7 +33,7 @@ from app.modules.users.repository import UserRecord, UserRepository
 
 
 class PetService:
-    """Business logic for Pet Profiles, Medical Records, Emergency Workflows, and Privacy Authorization."""
+    """Business logic for Pet Profiles, Photos/Videos Media Gallery, Medical Records, and Emergency Workflows."""
 
     def __init__(self, db: DatabaseManager, storage: Optional[StorageService] = None) -> None:
         self._pet_repo = PetRepository(db)
@@ -88,6 +90,7 @@ class PetService:
         contacts = self._pet_repo.list_emergency_contacts(pet.id)
         vet = self._pet_repo.get_veterinarian(pet.id)
         med_records = self._pet_repo.list_medical_records(pet.id)
+        media_items = self._pet_repo.list_pet_media(pet.id)
 
         return PetResponse(
             id=pet.id,
@@ -154,6 +157,19 @@ class PetService:
                 )
                 for m in med_records
             ],
+            media_gallery=[
+                PetMediaResponse(
+                    id=media.id,
+                    pet_id=media.pet_id,
+                    media_type=media.media_type,
+                    title=media.title,
+                    url=media.url,
+                    duration_seconds=media.duration_seconds,
+                    notes=media.notes,
+                    created_at=media.created_at,
+                )
+                for media in media_items
+            ],
             created_at=pet.created_at,
             updated_at=pet.updated_at,
         )
@@ -207,6 +223,8 @@ class PetService:
                     "record_type": rec.record_type.value,
                 },
             )
+        for media in payload.media_gallery:
+            self._pet_repo.add_pet_media(pet_id=pet.id, data=media.dict())
 
         self._user_repo.create_audit_log(
             actor_user_id=current_user.id,
@@ -217,6 +235,52 @@ class PetService:
             metadata={"name": pet.name, "species": pet.species},
         )
         return self._assemble_pet_response(pet)
+
+    def add_pet_media(
+        self,
+        current_user: UserRecord,
+        pet_id: str,
+        payload: PetMediaCreateRequest,
+    ) -> PetMediaResponse:
+        pet = self._get_active_pet_or_404(pet_id)
+        self._ensure_owner_or_admin(pet, current_user)
+        media = self._pet_repo.add_pet_media(pet_id=pet.id, data=payload.dict())
+        self._user_repo.create_audit_log(
+            actor_user_id=current_user.id,
+            action="PET_MEDIA_ADDED",
+            entity_type="PET",
+            entity_id=pet.id,
+            correlation_id=get_correlation_id() or None,
+            metadata={"media_id": media.id, "media_type": media.media_type, "title": media.title},
+        )
+        return PetMediaResponse(
+            id=media.id,
+            pet_id=media.pet_id,
+            media_type=media.media_type,
+            title=media.title,
+            url=media.url,
+            duration_seconds=media.duration_seconds,
+            notes=media.notes,
+            created_at=media.created_at,
+        )
+
+    def list_pet_media(self, current_user: UserRecord, pet_id: str) -> List[PetMediaResponse]:
+        pet = self._get_active_pet_or_404(pet_id)
+        self._ensure_can_view_pet(pet, current_user)
+        items = self._pet_repo.list_pet_media(pet.id)
+        return [
+            PetMediaResponse(
+                id=m.id,
+                pet_id=m.pet_id,
+                media_type=m.media_type,
+                title=m.title,
+                url=m.url,
+                duration_seconds=m.duration_seconds,
+                notes=m.notes,
+                created_at=m.created_at,
+            )
+            for m in items
+        ]
 
     def list_my_pets(
         self,
@@ -318,6 +382,16 @@ class PetService:
             data=raw_bytes,
         )
         self._pet_repo.update_pet(pet.id, {"photo_url": stored.public_url})
+        # Also record in pet_media gallery
+        self._pet_repo.add_pet_media(
+            pet_id=pet.id,
+            data={
+                "media_type": "PHOTO",
+                "title": f"{pet.name} Profile Photo",
+                "url": stored.public_url,
+                "notes": "Uploaded via Pet Photo API",
+            },
+        )
         self._user_repo.create_audit_log(
             actor_user_id=current_user.id,
             action="PET_PHOTO_UPLOADED",

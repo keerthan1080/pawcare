@@ -1,10 +1,22 @@
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from app.database.connection import DatabaseManager
+
+
+def normalize_phone_digits(phone: Optional[str]) -> Optional[str]:
+    if not phone:
+        return None
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 10:
+        return f"+91{digits}"
+    if len(digits) == 12 and digits.startswith("91"):
+        return f"+{digits}"
+    return f"+{digits}" if digits else phone.strip()
 
 
 @dataclass
@@ -32,8 +44,20 @@ class AuditLogRecord:
     created_at: str
 
 
+@dataclass
+class MobileOtpChallengeRecord:
+    id: str
+    phone: str
+    otp_hash: str
+    role: str
+    attempts: int
+    is_consumed: bool
+    expires_at: int
+    created_at: str
+
+
 class UserRepository:
-    """Data access layer for users and security audit logs."""
+    """Data access layer for users, OAuth identities, Mobile OTP challenges, and security audit logs."""
 
     def __init__(self, db: DatabaseManager) -> None:
         self._db = db
@@ -71,6 +95,17 @@ class UserRepository:
             row = cur.fetchone()
             return self._row_to_user(row) if row else None
 
+    def get_by_phone(self, phone: str) -> Optional[UserRecord]:
+        target_norm = normalize_phone_digits(phone)
+        if not target_norm:
+            return None
+        with self._db.lock:
+            cur = self._db.connection.execute("SELECT * FROM users WHERE phone IS NOT NULL")
+            for row in cur.fetchall():
+                if normalize_phone_digits(row["phone"]) == target_norm:
+                    return self._row_to_user(row)
+            return None
+
     def create_user(
         self,
         email: str,
@@ -92,6 +127,108 @@ class UserRepository:
             )
             self._db.connection.commit()
         return self.get_by_id(user_id)  # type: ignore[return-value]
+
+    def link_oauth_identity(
+        self,
+        user_id: str,
+        provider: str,
+        provider_subject: str,
+        email: str,
+    ) -> None:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        oid = str(uuid.uuid4())
+        with self._db.lock:
+            self._db.connection.execute(
+                """
+                INSERT OR IGNORE INTO oauth_identities (id, user_id, provider, provider_subject, email, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (oid, user_id, provider.upper(), provider_subject, email.strip().lower(), now),
+            )
+            self._db.connection.commit()
+
+    def create_otp_challenge(
+        self,
+        phone: str,
+        otp_hash: str,
+        role: str,
+        expires_at: int,
+    ) -> MobileOtpChallengeRecord:
+        cid = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        norm_phone = normalize_phone_digits(phone) or phone.strip()
+        with self._db.lock:
+            # Invalidate prior unconsumed challenges for the same phone
+            self._db.connection.execute(
+                "UPDATE mobile_otp_challenges SET is_consumed = 1 WHERE phone = ? AND is_consumed = 0",
+                (norm_phone,),
+            )
+            self._db.connection.execute(
+                """
+                INSERT INTO mobile_otp_challenges (id, phone, otp_hash, role, attempts, is_consumed, expires_at, created_at)
+                VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+                """,
+                (cid, norm_phone, otp_hash, role, expires_at, now),
+            )
+            self._db.connection.commit()
+        return MobileOtpChallengeRecord(
+            id=cid,
+            phone=norm_phone,
+            otp_hash=otp_hash,
+            role=role,
+            attempts=0,
+            is_consumed=False,
+            expires_at=expires_at,
+            created_at=now,
+        )
+
+    def get_latest_active_otp_challenge(self, phone: str) -> Optional[MobileOtpChallengeRecord]:
+        norm_phone = normalize_phone_digits(phone) or phone.strip()
+        with self._db.lock:
+            cur = self._db.connection.execute(
+                """
+                SELECT * FROM mobile_otp_challenges
+                WHERE phone = ? AND is_consumed = 0
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (norm_phone,),
+            )
+            r = cur.fetchone()
+            if not r:
+                return None
+            return MobileOtpChallengeRecord(
+                id=r["id"],
+                phone=r["phone"],
+                otp_hash=r["otp_hash"],
+                role=r["role"],
+                attempts=int(r["attempts"]),
+                is_consumed=bool(r["is_consumed"]),
+                expires_at=int(r["expires_at"]),
+                created_at=r["created_at"],
+            )
+
+    def increment_otp_attempts(self, challenge_id: str) -> int:
+        with self._db.lock:
+            self._db.connection.execute(
+                "UPDATE mobile_otp_challenges SET attempts = attempts + 1 WHERE id = ?",
+                (challenge_id,),
+            )
+            self._db.connection.commit()
+            cur = self._db.connection.execute(
+                "SELECT attempts FROM mobile_otp_challenges WHERE id = ?",
+                (challenge_id,),
+            )
+            row = cur.fetchone()
+            return int(row["attempts"]) if row else 0
+
+    def mark_otp_consumed(self, challenge_id: str) -> None:
+        with self._db.lock:
+            self._db.connection.execute(
+                "UPDATE mobile_otp_challenges SET is_consumed = 1 WHERE id = ?",
+                (challenge_id,),
+            )
+            self._db.connection.commit()
 
     def update_profile(
         self,

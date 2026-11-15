@@ -36,8 +36,18 @@ class Settings:
         self.access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
         self.refresh_token_expire_days: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
-        raw_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+        raw_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost")
         self.cors_origins: List[str] = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
+        # Google Sign-In & Okta SSO Settings
+        self.google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+        self.okta_issuer_url: str = os.getenv("OKTA_ISSUER_URL", "")
+        self.okta_client_id: str = os.getenv("OKTA_CLIENT_ID", "")
+
+        # Mobile Number OTP Settings
+        self.sms_provider: str = os.getenv("SMS_PROVIDER", "local_console")
+        self.otp_expire_seconds: int = int(os.getenv("OTP_EXPIRE_SECONDS", "300"))
+        self.otp_max_attempts: int = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
 
 
 @lru_cache()

@@ -140,7 +140,7 @@ def search_caregivers(
     latitude: Optional[float] = Query(default=None, ge=-90.0, le=90.0),
     longitude: Optional[float] = Query(default=None, ge=-180.0, le=180.0),
     max_distance_km: Optional[float] = Query(default=None, gt=0.0),
-    sort_by: str = Query(default="recommended", regex="^(recommended|distance_asc|rating_desc|price_asc)$"),
+    sort_by: str = Query(default="recommended"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     db: DatabaseManager = Depends(get_db),

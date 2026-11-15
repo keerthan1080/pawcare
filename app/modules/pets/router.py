@@ -11,6 +11,8 @@ from app.modules.pets.schemas import (
     PetCreateRequest,
     PetEmergencyInfoUpdateRequest,
     PetEmergencySummaryResponse,
+    PetMediaCreateRequest,
+    PetMediaResponse,
     PetPhotoUploadRequest,
     PetPhotoUploadResponse,
     PetResponse,
@@ -86,6 +88,31 @@ def upload_pet_photo(
 ) -> PetPhotoUploadResponse:
     service = PetService(db, storage=storage)
     return service.upload_pet_photo(current_user, pet_id, payload)
+
+
+@router.post(
+    "/{pet_id}/media",
+    response_model=PetMediaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_pet_media_item(
+    pet_id: str,
+    payload: PetMediaCreateRequest,
+    current_user: UserRecord = Depends(get_current_user),
+    db: DatabaseManager = Depends(get_db),
+) -> PetMediaResponse:
+    service = PetService(db)
+    return service.add_pet_media(current_user, pet_id, payload)
+
+
+@router.get("/{pet_id}/media", response_model=List[PetMediaResponse])
+def list_pet_media_items(
+    pet_id: str,
+    current_user: UserRecord = Depends(get_current_user),
+    db: DatabaseManager = Depends(get_db),
+) -> List[PetMediaResponse]:
+    service = PetService(db)
+    return service.list_pet_media(current_user, pet_id)
 
 
 @router.post(

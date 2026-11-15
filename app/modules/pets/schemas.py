@@ -36,6 +36,27 @@ class WalkingScheduleItem(BaseModel):
         return cleaned
 
 
+class PetMediaCreateRequest(BaseModel):
+    media_type: str = Field(..., description="PHOTO or VIDEO")
+    title: str = Field(..., min_length=2, max_length=150)
+    url: str = Field(..., min_length=5, max_length=512)
+    duration_seconds: Optional[int] = Field(default=None, ge=1, le=600)
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+    @validator("media_type")
+    def validate_media_type(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper()
+        if cleaned not in ("PHOTO", "VIDEO"):
+            raise ValueError("media_type must be either 'PHOTO' or 'VIDEO'.")
+        return cleaned
+
+
+class PetMediaResponse(PetMediaCreateRequest):
+    id: str
+    pet_id: str
+    created_at: datetime
+
+
 class EmergencyContactInput(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
     relationship: str = Field(..., min_length=2, max_length=64)
@@ -111,6 +132,7 @@ class PetCreateRequest(BaseModel):
     emergency_contacts: List[EmergencyContactInput] = Field(default_factory=list)
     preferred_veterinarian: Optional[VeterinarianInput] = Field(default=None)
     medical_records: List[MedicalRecordCreateRequest] = Field(default_factory=list)
+    media_gallery: List[PetMediaCreateRequest] = Field(default_factory=list)
 
     @validator("name")
     def strip_pet_name(cls, v: str) -> str:
@@ -205,6 +227,7 @@ class PetResponse(BaseModel):
     emergency_contacts: List[EmergencyContactResponse] = Field(default_factory=list)
     preferred_veterinarian: Optional[VeterinarianResponse] = None
     medical_records: List[MedicalRecordResponse] = Field(default_factory=list)
+    media_gallery: List[PetMediaResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

@@ -66,6 +66,30 @@ class DatabaseManager:
                 );
                 CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
                 CREATE INDEX IF NOT EXISTS ix_users_role ON users(role);
+                CREATE INDEX IF NOT EXISTS ix_users_phone ON users(phone);
+
+                CREATE TABLE IF NOT EXISTS oauth_identities (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    provider TEXT NOT NULL CHECK (provider IN ('GOOGLE', 'OKTA')),
+                    provider_subject TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (provider, provider_subject)
+                );
+                CREATE INDEX IF NOT EXISTS ix_oauth_identities_user_id ON oauth_identities(user_id);
+
+                CREATE TABLE IF NOT EXISTS mobile_otp_challenges (
+                    id TEXT PRIMARY KEY,
+                    phone TEXT NOT NULL,
+                    otp_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'PET_PARENT',
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    is_consumed INTEGER NOT NULL DEFAULT 0,
+                    expires_at INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_mobile_otp_challenges_phone ON mobile_otp_challenges(phone);
 
                 CREATE TABLE IF NOT EXISTS audit_logs (
                     id TEXT PRIMARY KEY,
@@ -106,6 +130,18 @@ class DatabaseManager:
                 );
                 CREATE INDEX IF NOT EXISTS ix_pets_owner_id ON pets(owner_id);
                 CREATE INDEX IF NOT EXISTS ix_pets_species ON pets(species);
+
+                CREATE TABLE IF NOT EXISTS pet_media (
+                    id TEXT PRIMARY KEY,
+                    pet_id TEXT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+                    media_type TEXT NOT NULL CHECK (media_type IN ('PHOTO', 'VIDEO')),
+                    title TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    duration_seconds INTEGER,
+                    notes TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_pet_media_pet_id ON pet_media(pet_id);
 
                 CREATE TABLE IF NOT EXISTS emergency_contacts (
                     id TEXT PRIMARY KEY,
@@ -262,6 +298,9 @@ class DatabaseManager:
                     total_price_inr REAL NOT NULL,
                     special_instructions TEXT,
                     cancellation_reason TEXT,
+                    media_reviewed_by_admin INTEGER NOT NULL DEFAULT 0,
+                    admin_review_notes TEXT,
+                    assigned_by_admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -282,6 +321,20 @@ class DatabaseManager:
                     created_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS ix_booking_items_booking_id ON booking_items(booking_id);
+
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id TEXT PRIMARY KEY,
+                    booking_id TEXT REFERENCES bookings(id) ON DELETE CASCADE,
+                    recipient_role TEXT NOT NULL,
+                    recipient_phone TEXT NOT NULL,
+                    channel TEXT NOT NULL DEFAULT 'WHATSAPP',
+                    event_type TEXT NOT NULL,
+                    message_body TEXT NOT NULL,
+                    whatsapp_url TEXT NOT NULL,
+                    delivery_status TEXT NOT NULL DEFAULT 'SENT',
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_notifications_booking_id ON notifications(booking_id);
                 """
             )
             self._seed_services()
@@ -300,6 +353,7 @@ class DatabaseManager:
         with self._lock:
             self._conn.executescript(
                 """
+                DELETE FROM notifications;
                 DELETE FROM booking_items;
                 DELETE FROM bookings;
                 DELETE FROM availability;
@@ -307,10 +361,13 @@ class DatabaseManager:
                 DELETE FROM caregiver_services;
                 DELETE FROM caregivers;
                 DELETE FROM caregiver_pet_access;
+                DELETE FROM pet_media;
                 DELETE FROM pet_medical_records;
                 DELETE FROM veterinarians;
                 DELETE FROM emergency_contacts;
                 DELETE FROM pets;
+                DELETE FROM mobile_otp_challenges;
+                DELETE FROM oauth_identities;
                 DELETE FROM audit_logs;
                 DELETE FROM users;
                 """

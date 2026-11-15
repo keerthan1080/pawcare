@@ -26,6 +26,9 @@ class BookingRecord:
     total_price_inr: float
     special_instructions: Optional[str]
     cancellation_reason: Optional[str]
+    media_reviewed_by_admin: bool
+    admin_review_notes: Optional[str]
+    assigned_by_admin_id: Optional[str]
     created_at: str
     updated_at: str
 
@@ -50,6 +53,7 @@ class BookingRepository:
 
     @staticmethod
     def _row_to_booking(r) -> BookingRecord:
+        keys = r.keys()
         return BookingRecord(
             id=r["id"],
             pet_parent_id=r["pet_parent_id"],
@@ -69,6 +73,9 @@ class BookingRepository:
             total_price_inr=float(r["total_price_inr"]),
             special_instructions=r["special_instructions"],
             cancellation_reason=r["cancellation_reason"],
+            media_reviewed_by_admin=bool(r["media_reviewed_by_admin"]) if "media_reviewed_by_admin" in keys else False,
+            admin_review_notes=r["admin_review_notes"] if "admin_review_notes" in keys else None,
+            assigned_by_admin_id=r["assigned_by_admin_id"] if "assigned_by_admin_id" in keys else None,
             created_at=r["created_at"],
             updated_at=r["updated_at"],
         )
@@ -103,13 +110,11 @@ class BookingRepository:
             ]
 
     def create_booking_atomic(self, fields: Dict[str, Any]) -> Optional[BookingRecord]:
-        """Atomically validates slot capacity & overlapping bookings, increments booked_count, and inserts booking."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         booking_id = str(uuid.uuid4())
         item_id = str(uuid.uuid4())
 
         with self._db.lock:
-            # 1. Find covering availability slot with remaining capacity
             slot_cur = self._db.connection.execute(
                 """
                 SELECT id, max_capacity, booked_count
@@ -128,7 +133,6 @@ class BookingRepository:
             if slot is None:
                 return None
 
-            # 2. Check active overlapping bookings against slot max_capacity (Rule 1: No Double Booking)
             overlap_cur = self._db.connection.execute(
                 """
                 SELECT COUNT(*) AS active_overlaps
@@ -144,14 +148,12 @@ class BookingRepository:
             if active_overlaps >= int(slot["max_capacity"]):
                 return None
 
-            # 3. Increment booked_count on availability slot
             new_booked_count = int(slot["booked_count"]) + 1
             self._db.connection.execute(
                 "UPDATE availability SET booked_count = ?, updated_at = ? WHERE id = ?",
                 (new_booked_count, now, slot["id"]),
             )
 
-            # 4. Insert booking record
             self._db.connection.execute(
                 """
                 INSERT INTO bookings (
@@ -160,8 +162,9 @@ class BookingRepository:
                     unit_price_inr, price_unit, units_count,
                     subtotal_inr, platform_commission_inr, caregiver_payout_inr,
                     total_price_inr, special_instructions, cancellation_reason,
+                    media_reviewed_by_admin, admin_review_notes, assigned_by_admin_id,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAYMENT_PENDING', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PAYMENT_PENDING', ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL, NULL, ?, ?)
                 """,
                 (
                     booking_id,
@@ -185,7 +188,6 @@ class BookingRepository:
                 ),
             )
 
-            # 5. Insert primary booking line item
             self._db.connection.execute(
                 """
                 INSERT INTO booking_items (
@@ -204,12 +206,118 @@ class BookingRepository:
                 ),
             )
 
-            # 6. Grant caregiver booking-scoped pet read access (Rule 8)
             self._db.connection.execute(
                 "INSERT OR IGNORE INTO caregiver_pet_access (pet_id, caregiver_user_id, booking_id) VALUES (?, ?, ?)",
                 (fields["pet_id"], fields["caregiver_user_id"], booking_id),
             )
 
+            self._db.connection.commit()
+
+        return self.get_by_id(booking_id)
+
+    def admin_confirm_payment(
+        self,
+        booking_id: str,
+        review_notes: Optional[str],
+    ) -> Optional[BookingRecord]:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self._db.lock:
+            self._db.connection.execute(
+                """
+                UPDATE bookings
+                SET status = 'PAID',
+                    media_reviewed_by_admin = 1,
+                    admin_review_notes = COALESCE(?, admin_review_notes),
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (review_notes, now, booking_id),
+            )
+            self._db.connection.commit()
+        return self.get_by_id(booking_id)
+
+    def admin_assign_caretaker(
+        self,
+        booking_id: str,
+        new_caregiver_id: str,
+        new_caregiver_user_id: str,
+        admin_user_id: str,
+        assignment_notes: Optional[str],
+    ) -> Optional[BookingRecord]:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        booking = self.get_by_id(booking_id)
+        if booking is None:
+            return None
+
+        with self._db.lock:
+            # If Admin reassigns to a different caregiver, transfer slot reservation & pet access
+            if booking.caregiver_id != new_caregiver_id:
+                slot_cur = self._db.connection.execute(
+                    """
+                    SELECT id, max_capacity, booked_count
+                    FROM availability
+                    WHERE caregiver_id = ?
+                      AND is_available = 1
+                      AND booked_count < max_capacity
+                      AND start_time <= ?
+                      AND end_time >= ?
+                    ORDER BY start_time ASC
+                    LIMIT 1
+                    """,
+                    (new_caregiver_id, booking.start_time, booking.end_time),
+                )
+                new_slot = slot_cur.fetchone()
+                if new_slot is None:
+                    return None
+
+                if booking.availability_slot_id:
+                    self._db.connection.execute(
+                        """
+                        UPDATE availability
+                        SET booked_count = CASE WHEN booked_count > 0 THEN booked_count - 1 ELSE 0 END,
+                            updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (now, booking.availability_slot_id),
+                    )
+                self._db.connection.execute(
+                    "UPDATE availability SET booked_count = booked_count + 1, updated_at = ? WHERE id = ?",
+                    (now, new_slot["id"]),
+                )
+                self._db.connection.execute(
+                    "DELETE FROM caregiver_pet_access WHERE booking_id = ?",
+                    (booking_id,),
+                )
+                self._db.connection.execute(
+                    "INSERT OR IGNORE INTO caregiver_pet_access (pet_id, caregiver_user_id, booking_id) VALUES (?, ?, ?)",
+                    (booking.pet_id, new_caregiver_user_id, booking_id),
+                )
+                new_slot_id = new_slot["id"]
+            else:
+                new_slot_id = booking.availability_slot_id
+                self._db.connection.execute(
+                    "INSERT OR IGNORE INTO caregiver_pet_access (pet_id, caregiver_user_id, booking_id) VALUES (?, ?, ?)",
+                    (booking.pet_id, new_caregiver_user_id, booking_id),
+                )
+
+            combined_notes = (
+                f"{booking.admin_review_notes} | {assignment_notes}"
+                if booking.admin_review_notes and assignment_notes
+                else (assignment_notes or booking.admin_review_notes)
+            )
+            self._db.connection.execute(
+                """
+                UPDATE bookings
+                SET caregiver_id = ?,
+                    availability_slot_id = ?,
+                    status = 'CONFIRMED',
+                    assigned_by_admin_id = ?,
+                    admin_review_notes = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (new_caregiver_id, new_slot_id, admin_user_id, combined_notes, now, booking_id),
+            )
             self._db.connection.commit()
 
         return self.get_by_id(booking_id)

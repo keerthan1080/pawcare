@@ -34,6 +34,18 @@ class PetRecord:
 
 
 @dataclass
+class PetMediaRecord:
+    id: str
+    pet_id: str
+    media_type: str
+    title: str
+    url: str
+    duration_seconds: Optional[int]
+    notes: Optional[str]
+    created_at: str
+
+
+@dataclass
 class EmergencyContactRecord:
     id: str
     pet_id: str
@@ -74,7 +86,7 @@ class MedicalRecord:
 
 
 class PetRepository:
-    """Data access layer for pets, emergency contacts, veterinarians, and medical records."""
+    """Data access layer for pets, media gallery (photos/videos), emergency contacts, vets, and medical records."""
 
     def __init__(self, db: DatabaseManager) -> None:
         self._db = db
@@ -199,6 +211,58 @@ class PetRepository:
             )
             self._db.connection.commit()
         return self.get_by_id(pet_id)
+
+    def add_pet_media(self, pet_id: str, data: Dict[str, Any]) -> PetMediaRecord:
+        mid = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self._db.lock:
+            self._db.connection.execute(
+                """
+                INSERT INTO pet_media (id, pet_id, media_type, title, url, duration_seconds, notes, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    mid,
+                    pet_id,
+                    data["media_type"],
+                    data["title"].strip(),
+                    data["url"].strip(),
+                    data.get("duration_seconds"),
+                    data.get("notes"),
+                    now,
+                ),
+            )
+            self._db.connection.commit()
+        return PetMediaRecord(
+            id=mid,
+            pet_id=pet_id,
+            media_type=data["media_type"],
+            title=data["title"].strip(),
+            url=data["url"].strip(),
+            duration_seconds=data.get("duration_seconds"),
+            notes=data.get("notes"),
+            created_at=now,
+        )
+
+    def list_pet_media(self, pet_id: str) -> List[PetMediaRecord]:
+        with self._db.lock:
+            cur = self._db.connection.execute(
+                "SELECT * FROM pet_media WHERE pet_id = ? ORDER BY created_at ASC",
+                (pet_id,),
+            )
+            return [
+                PetMediaRecord(
+                    id=r["id"],
+                    pet_id=r["pet_id"],
+                    media_type=r["media_type"],
+                    title=r["title"],
+                    url=r["url"],
+                    duration_seconds=r["duration_seconds"],
+                    notes=r["notes"],
+                    created_at=r["created_at"],
+                )
+                for r in cur.fetchall()
+            ]
 
     def replace_emergency_contacts(
         self,
