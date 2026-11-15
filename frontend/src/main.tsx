@@ -911,48 +911,37 @@ function App() {
               </div>
 
               <div className="grid grid-cols-2 gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOauthProviderModal("GOOGLE");
-                    setOauthEmailInput("");
-                    setOauthNameInput("");
-                  }}
-                  className="flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl transition shadow-2xs"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#EA4335"
-                      d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
-                    />
-                    <path
-                      fill="#4285F4"
-                      d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 20.9 7.4 24 12 24z"
-                    />
-                  </svg>
-                  <span>Google</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOauthProviderModal("OKTA");
-                    setOauthEmailInput("");
-                    setOauthNameInput("");
-                  }}
-                  className="flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl transition shadow-2xs"
-                >
-                  <span className="w-4 h-4 rounded-full border-4 border-indigo-700 inline-block"></span>
-                  <span>Okta SSO</span>
-                </button>
+                  <div className="w-full mt-2">
+                      <button
+                          type="button"
+                          onClick={() => {
+                              setOauthProviderModal("GOOGLE");
+                              setOauthEmailInput("");
+                              setOauthNameInput("");
+                          }}
+                          className="w-full flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50
+                                       text-slate-800 font-bold text-xs py-2.5 px-3 rounded-xl transition shadow-2xs">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24">
+                              <path
+                                  fill="#EA4335"
+                                  d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"
+                              />
+                              <path
+                                  fill="#4285F4"
+                                  d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
+                              />
+                              <path
+                                  fill="#FBBC05"
+                                  d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"
+                              />
+                              <path
+                                  fill="#34A853"
+                                  d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.8C3.5 20.9 7.4 24 12 24z"
+                              />
+                          </svg>
+                          <span>Google</span>
+                      </button>
+                  </div>
               </div>
             </div>
           </div>
@@ -964,23 +953,17 @@ function App() {
             <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
-                  {oauthProviderModal === "GOOGLE" ? (
+                  {(
                     <span className="w-8 h-8 rounded-lg bg-red-50 text-red-600 font-extrabold flex items-center justify-center text-sm">
                       G
-                    </span>
-                  ) : (
-                    <span className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 font-extrabold flex items-center justify-center text-sm">
-                      O
                     </span>
                   )}
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900">
-                      {oauthProviderModal === "GOOGLE" ? "Sign in with Google" : "Sign in with Okta SSO"}
+                      {"Sign in with Google"}
                     </h3>
                     <p className="text-xs text-slate-500">
-                      {oauthProviderModal === "GOOGLE"
-                        ? "Google OAuth 2.0 / OIDC Identity Provider"
-                        : "Okta Enterprise OpenID Connect (OIDC)"}
+                      {"Sign in using your Google Account"}
                     </p>
                   </div>
                 </div>
@@ -1009,14 +992,14 @@ function App() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
-                    {oauthProviderModal === "GOOGLE" ? "Google Account Email" : "Okta Enterprise Email"}
+                    {"Google Account Email"}
                   </label>
                   <input
                     type="email"
                     value={oauthEmailInput}
                     onChange={(e) => setOauthEmailInput(e.target.value)}
                     required
-                    placeholder={oauthProviderModal === "GOOGLE" ? "you@gmail.com" : "name@company.com"}
+                    placeholder={"you@gmail.com"}
                     className="w-full text-sm border border-slate-300 rounded-xl px-3.5 py-2.5"
                   />
                 </div>
