@@ -237,6 +237,51 @@ class DatabaseManager:
                 );
                 CREATE INDEX IF NOT EXISTS ix_availability_caregiver_id ON availability(caregiver_id);
                 CREATE INDEX IF NOT EXISTS ix_availability_window ON availability(caregiver_id, start_time, end_time);
+
+                CREATE TABLE IF NOT EXISTS bookings (
+                    id TEXT PRIMARY KEY,
+                    pet_parent_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    caregiver_id TEXT NOT NULL REFERENCES caregivers(id) ON DELETE RESTRICT,
+                    pet_id TEXT NOT NULL REFERENCES pets(id) ON DELETE RESTRICT,
+                    availability_slot_id TEXT REFERENCES availability(id) ON DELETE SET NULL,
+                    service_type TEXT NOT NULL REFERENCES services(code) ON DELETE RESTRICT,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'PAYMENT_PENDING'
+                        CHECK (status IN (
+                            'DRAFT', 'PENDING_CONFIRMATION', 'PAYMENT_PENDING',
+                            'CONFIRMED', 'PAID', 'IN_PROGRESS', 'COMPLETED',
+                            'CANCELLED', 'REJECTED', 'REFUND_PENDING', 'REFUNDED', 'DISPUTED'
+                        )),
+                    unit_price_inr REAL NOT NULL,
+                    price_unit TEXT NOT NULL,
+                    units_count INTEGER NOT NULL DEFAULT 1,
+                    subtotal_inr REAL NOT NULL,
+                    platform_commission_inr REAL NOT NULL,
+                    caregiver_payout_inr REAL NOT NULL,
+                    total_price_inr REAL NOT NULL,
+                    special_instructions TEXT,
+                    cancellation_reason TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_bookings_pet_parent_id ON bookings(pet_parent_id);
+                CREATE INDEX IF NOT EXISTS ix_bookings_caregiver_id ON bookings(caregiver_id);
+                CREATE INDEX IF NOT EXISTS ix_bookings_pet_id ON bookings(pet_id);
+                CREATE INDEX IF NOT EXISTS ix_bookings_status ON bookings(status);
+                CREATE INDEX IF NOT EXISTS ix_bookings_time_window ON bookings(caregiver_id, start_time, end_time);
+
+                CREATE TABLE IF NOT EXISTS booking_items (
+                    id TEXT PRIMARY KEY,
+                    booking_id TEXT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+                    item_type TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 1,
+                    unit_amount_inr REAL NOT NULL,
+                    total_amount_inr REAL NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_booking_items_booking_id ON booking_items(booking_id);
                 """
             )
             self._seed_services()
@@ -255,6 +300,8 @@ class DatabaseManager:
         with self._lock:
             self._conn.executescript(
                 """
+                DELETE FROM booking_items;
+                DELETE FROM bookings;
                 DELETE FROM availability;
                 DELETE FROM caregiver_verifications;
                 DELETE FROM caregiver_services;

@@ -8,6 +8,7 @@ from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware
 from app.modules.auth.router import router as auth_router
 from app.modules.availability.router import router as availability_router
+from app.modules.bookings.router import router as bookings_router
 from app.modules.caregivers.router import router as caregivers_router
 from app.modules.pets.router import router as pets_router
 from app.modules.services.router import router as services_router
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     application.include_router(services_router, prefix=settings.api_v1_prefix)
     application.include_router(caregivers_router, prefix=settings.api_v1_prefix)
     application.include_router(availability_router, prefix=settings.api_v1_prefix)
+    application.include_router(bookings_router, prefix=settings.api_v1_prefix)
 
     @application.get(f"{settings.api_v1_prefix}/health", tags=["System"])
     def health_check() -> dict:

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 
@@ -13,15 +14,16 @@ from app.modules.caregivers.schemas import (
     CaregiverProfileCreateRequest,
     CaregiverProfileResponse,
     CaregiverProfileUpdateRequest,
+    CaregiverQuoteResponse,
     CaregiverServicesPutRequest,
     CaregiverVerificationResponse,
     CaregiverVerificationSubmitRequest,
 )
 from app.modules.caregivers.service import CaregiverService
 from app.modules.users.repository import UserRecord
-from app.security.dependencies import get_current_user, require_roles
+from app.security.dependencies import require_roles
 
-router = APIRouter(prefix="/caregivers", tags=["Caregivers"])
+router = APIRouter(prefix="/caregivers", tags=["Caregivers & Discovery"])
 
 
 @router.post("/me", response_model=CaregiverProfileResponse, status_code=status.HTTP_201_CREATED)
@@ -126,10 +128,19 @@ def admin_update_caregiver_verification_status(
 @router.get("", response_model=PaginatedResponse[CaregiverProfileResponse])
 def search_caregivers(
     city: Optional[str] = Query(default=None),
+    locality: Optional[str] = Query(default=None),
     service_type: Optional[ServiceType] = Query(default=None),
     species: Optional[PetSpecies] = Query(default=None),
+    pet_weight_kg: Optional[float] = Query(default=None, gt=0.0),
     verified_only: bool = Query(default=False),
+    min_rating: Optional[float] = Query(default=None, ge=0.0, le=5.0),
     max_price_inr: Optional[float] = Query(default=None, gt=0.0),
+    start_time: Optional[datetime] = Query(default=None),
+    end_time: Optional[datetime] = Query(default=None),
+    latitude: Optional[float] = Query(default=None, ge=-90.0, le=90.0),
+    longitude: Optional[float] = Query(default=None, ge=-180.0, le=180.0),
+    max_distance_km: Optional[float] = Query(default=None, gt=0.0),
+    sort_by: str = Query(default="recommended", regex="^(recommended|distance_asc|rating_desc|price_asc)$"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     db: DatabaseManager = Depends(get_db),
@@ -137,12 +148,38 @@ def search_caregivers(
     service = CaregiverService(db)
     return service.search_caregivers(
         city=city,
+        locality=locality,
         service_type=service_type,
         species=species,
+        pet_weight_kg=pet_weight_kg,
         verified_only=verified_only,
+        min_rating=min_rating,
         max_price_inr=max_price_inr,
+        start_time=start_time,
+        end_time=end_time,
+        latitude=latitude,
+        longitude=longitude,
+        max_distance_km=max_distance_km,
+        sort_by=sort_by,
         page=page,
         size=size,
+    )
+
+
+@router.get("/{caregiver_id}/quote", response_model=CaregiverQuoteResponse)
+def get_caregiver_booking_quote(
+    caregiver_id: str,
+    service_type: ServiceType = Query(...),
+    start_time: datetime = Query(...),
+    end_time: datetime = Query(...),
+    db: DatabaseManager = Depends(get_db),
+) -> CaregiverQuoteResponse:
+    service = CaregiverService(db)
+    return service.get_service_quote(
+        caregiver_id=caregiver_id,
+        service_type=service_type,
+        start_time=start_time,
+        end_time=end_time,
     )
 
 

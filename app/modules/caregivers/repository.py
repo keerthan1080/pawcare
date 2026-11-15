@@ -233,6 +233,35 @@ class CaregiverRepository:
                 for r in cur.fetchall()
             ]
 
+    def get_service_for_caregiver(
+        self,
+        caregiver_id: str,
+        service_type: str,
+    ) -> Optional[CaregiverServiceRecord]:
+        with self._db.lock:
+            cur = self._db.connection.execute(
+                """
+                SELECT * FROM caregiver_services
+                WHERE caregiver_id = ? AND service_type = ? AND is_active = 1
+                """,
+                (caregiver_id, service_type),
+            )
+            r = cur.fetchone()
+            if not r:
+                return None
+            return CaregiverServiceRecord(
+                id=r["id"],
+                caregiver_id=r["caregiver_id"],
+                service_type=r["service_type"],
+                price_inr=float(r["price_inr"]),
+                price_unit=r["price_unit"],
+                duration_minutes=r["duration_minutes"],
+                description=r["description"],
+                is_active=bool(r["is_active"]),
+                created_at=r["created_at"],
+                updated_at=r["updated_at"],
+            )
+
     def create_verification(
         self,
         caregiver_id: str,
@@ -252,7 +281,6 @@ class CaregiverRepository:
                 """,
                 (vid, caregiver_id, category, document_reference, notes, now, now),
             )
-            # Transition caregiver from PENDING -> UNDER_REVIEW when they submit verification docs
             self._db.connection.execute(
                 """
                 UPDATE caregivers
@@ -341,13 +369,16 @@ class CaregiverRepository:
     def search_caregivers(
         self,
         city: Optional[str] = None,
+        locality: Optional[str] = None,
         service_type: Optional[str] = None,
         species: Optional[str] = None,
+        pet_weight_kg: Optional[float] = None,
         verified_only: bool = False,
+        min_rating: Optional[float] = None,
         max_price_inr: Optional[float] = None,
-        offset: int = 0,
-        limit: int = 20,
-    ) -> Tuple[List[CaregiverRecord], int]:
+        start_iso: Optional[str] = None,
+        end_iso: Optional[str] = None,
+    ) -> List[CaregiverRecord]:
         clauses = ["c.is_active = 1"]
         params: List[Any] = []
 
@@ -355,12 +386,24 @@ class CaregiverRepository:
             clauses.append("LOWER(c.city) = LOWER(?)")
             params.append(city.strip())
 
+        if locality:
+            clauses.append("LOWER(c.locality) = LOWER(?)")
+            params.append(locality.strip())
+
         if verified_only:
             clauses.append("c.verification_status = 'VERIFIED'")
+
+        if min_rating is not None:
+            clauses.append("c.rating_average >= ?")
+            params.append(float(min_rating))
 
         if species:
             clauses.append("c.supported_species_json LIKE ?")
             params.append(f'%"{species}"%')
+
+        if pet_weight_kg is not None:
+            clauses.append("(c.max_pet_weight_kg IS NULL OR c.max_pet_weight_kg >= ?)")
+            params.append(float(pet_weight_kg))
 
         if service_type or max_price_inr is not None:
             sub_clauses = ["cs.caregiver_id = c.id", "cs.is_active = 1"]
@@ -372,13 +415,23 @@ class CaregiverRepository:
                 params.append(float(max_price_inr))
             clauses.append(f"EXISTS (SELECT 1 FROM caregiver_services cs WHERE {' AND '.join(sub_clauses)})")
 
+        if start_iso and end_iso:
+            clauses.append(
+                """
+                EXISTS (
+                    SELECT 1 FROM availability a
+                    WHERE a.caregiver_id = c.id
+                      AND a.is_available = 1
+                      AND a.booked_count < a.max_capacity
+                      AND a.start_time <= ?
+                      AND a.end_time >= ?
+                )
+                """
+            )
+            params.extend([start_iso, end_iso])
+
         where_sql = " WHERE " + " AND ".join(clauses)
         with self._db.lock:
-            count_cur = self._db.connection.execute(
-                f"SELECT COUNT(*) AS cnt FROM caregivers c JOIN users u ON u.id = c.user_id {where_sql}",
-                tuple(params),
-            )
-            total = int(count_cur.fetchone()["cnt"])
             cur = self._db.connection.execute(
                 f"""
                 SELECT c.*, u.full_name
@@ -389,8 +442,7 @@ class CaregiverRepository:
                     CASE WHEN c.verification_status = 'VERIFIED' THEN 0 ELSE 1 END ASC,
                     c.rating_average DESC,
                     c.years_of_experience DESC
-                LIMIT ? OFFSET ?
                 """,
-                tuple(params + [limit, offset]),
+                tuple(params),
             )
-            return [self._row_to_caregiver(r) for r in cur.fetchall()], total
+            return [self._row_to_caregiver(r) for r in cur.fetchall()]

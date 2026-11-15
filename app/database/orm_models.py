@@ -182,5 +182,41 @@ try:
         created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
         updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
+    class BookingORM(Base):
+        __tablename__ = "bookings"
+
+        id = Column(String(36), primary_key=True, nullable=False)
+        pet_parent_id = Column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+        caregiver_id = Column(String(36), ForeignKey("caregivers.id", ondelete="RESTRICT"), nullable=False, index=True)
+        pet_id = Column(String(36), ForeignKey("pets.id", ondelete="RESTRICT"), nullable=False, index=True)
+        availability_slot_id = Column(String(36), ForeignKey("availability.id", ondelete="SET NULL"), nullable=True)
+        service_type = Column(String(40), ForeignKey("services.code", ondelete="RESTRICT"), nullable=False)
+        start_time = Column(DateTime(timezone=True), nullable=False)
+        end_time = Column(DateTime(timezone=True), nullable=False)
+        status = Column(String(32), nullable=False, default="PAYMENT_PENDING", index=True)
+        unit_price_inr = Column(Float, nullable=False)
+        price_unit = Column(String(30), nullable=False)
+        units_count = Column(Integer, nullable=False, default=1)
+        subtotal_inr = Column(Float, nullable=False)
+        platform_commission_inr = Column(Float, nullable=False)
+        caregiver_payout_inr = Column(Float, nullable=False)
+        total_price_inr = Column(Float, nullable=False)
+        special_instructions = Column(Text, nullable=True)
+        cancellation_reason = Column(Text, nullable=True)
+        created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+        updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    class BookingItemORM(Base):
+        __tablename__ = "booking_items"
+
+        id = Column(String(36), primary_key=True, nullable=False)
+        booking_id = Column(String(36), ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+        item_type = Column(String(40), nullable=False)
+        description = Column(String(255), nullable=False)
+        quantity = Column(Integer, nullable=False, default=1)
+        unit_amount_inr = Column(Float, nullable=False)
+        total_amount_inr = Column(Float, nullable=False)
+        created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
 except ImportError:  # pragma: no cover
     Base = None

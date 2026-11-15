@@ -145,6 +145,10 @@ class CaregiverProfileResponse(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     service_radius_km: float
+    distance_km: Optional[float] = Field(
+        default=None,
+        description="Haversine distance in km when search coordinates (latitude, longitude) are provided.",
+    )
     supported_species: List[PetSpecies]
     max_pet_weight_kg: Optional[float] = None
     special_capabilities: List[str]
@@ -159,3 +163,22 @@ class CaregiverProfileResponse(BaseModel):
     services: List[CaregiverServiceItemResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+class CaregiverQuoteResponse(BaseModel):
+    """Phase 4 Discovery quote & server-side availability check before booking."""
+
+    caregiver_id: str
+    caregiver_name: str
+    is_verified_badge: bool
+    service_type: ServiceType
+    start_time: datetime
+    end_time: datetime
+    is_available: bool
+    availability_slot_id: Optional[str] = None
+    unit_price_inr: float
+    price_unit: PriceUnit
+    units_count: int
+    subtotal_inr: float
+    platform_commission_inr: float
+    total_price_inr: float
